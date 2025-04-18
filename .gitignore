@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Everything in judah dir 
+judah/*
+
 # C extensions
 *.so
 
