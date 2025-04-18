@@ -19,6 +19,8 @@ from matplotlib.ticker import NullFormatter
 from matplotlib.ticker import AutoMinorLocator
 from orvara.format_fits import pull_chain_params, burnin_chain
 
+from orvara import autocorr_calc
+
 rc('font',**{'size':11.5})
 
 
@@ -42,6 +44,7 @@ class Orbit:
             step = np.where(OP.chain['lnp'] == np.amax(OP.chain['lnp']))[0][0]
             
         self.plx = OP.chain['plx_ML'][step]
+        #import pdb; pdb.set_trace()
         jit_per_inst = 'jitter0' in [col.name for col in OP.chain.columns]
         if jit_per_inst:
             nj = data.nInst
@@ -67,6 +70,7 @@ class Orbit:
         # most likely orbit for delRA and delDec
         self.dRAs_G, self.dDecs_G, self.dRAs_H1, self.dDecs_H1, self.dRAs_H2, self.dDecs_H2 = model.return_dRA_dDec()
         self.dras, self.ddecs = self.dRAs_G*self.plx*1000, self.dDecs_G*self.plx*1000
+        #import pdb; pdb.set_trace()
         self.RV = model.return_RVs()
         self.relsep = model.return_relsep()*self.plx
         self.PA = (model.return_PAs()*180/np.pi) % 360
@@ -99,7 +103,7 @@ class OrbitPlots:
 
     def start(self):
         self.cmlabel_dic = {'msec_jup': r'$\mathrm{M_{comp} (M_{Jup})}$','msec_solar': r'$\mathrm{M_{comp} (M_{\odot})}$', 'ecc': 'Eccentricity'}
-        self.color_list = ['r', 'g', 'b', 'y', 'c', 'b']
+        self.color_list = ['r', 'g', 'b', 'y', 'c', 'k', 'm', 'purple', 'tomato']
         
         ############################### load in data #######################
         # define epochs
@@ -507,7 +511,7 @@ class OrbitPlots:
                 rv_epoch_list.append(epoch_obs_Inst)
 
             jit_ml = orb_ml.par.return_jitters()
-        
+
             for i in range(self.nInst):
                 ax.errorbar(rv_epoch_list[i], self.RV_obs_dic[i] + orb_ml.offset[i], yerr=np.sqrt(self.RV_obs_err_dic[i]**2 + jit_ml[i]**2),
                             fmt=self.color_list[i]+'o', ecolor='black', alpha = 0.8, zorder = 299)
@@ -563,6 +567,7 @@ class OrbitPlots:
 
         for i in range(self.num_orbits):
             orb = Orbit(self, step=self.rand_idx[i])
+            #import pdb; pdb.set_trace()
             orb.RV -= orb.offset[0] - orb_ml.offset[0]
             ax1.plot(self.epoch_calendar, orb.RV, color=self.colormap(self.normalize(orb.colorpar)), alpha=0.3)
             ax2.plot(self.epoch_calendar, orb.RV - orb_ml.RV, color=self.colormap(self.normalize(orb.colorpar)), alpha=0.3)
@@ -591,6 +596,7 @@ class OrbitPlots:
         for i in range(self.nInst):
             plot_this = True
             if not self.whichInst == np.str('All'):
+                #import pdb; pdb.set_trace()
                 plot_this = False
                 whichInst = np.int(self.whichInst)
                 if i + 1 == whichInst and i < self.nInst:
@@ -1248,18 +1254,24 @@ class OrbitPlots:
             labels=[r'$\mathrm{M_{pri}\, (M_{\odot})}$', r'$\mathrm{M_{sec}\, (M_{\odot})}$', 'a (AU)', r'e', r'$\mathrm{i\, (^{\circ})}$']
         else:
             Msec = chain['msec' + npl]*1989/1.898
-            labels=[r'$\mathrm{M_{pri}\, (M_{\odot})}$', r'$\mathrm{M_{sec}\, (M_{Jup})}$', 'a (AU)', r'e', r'$\mathrm{i\, (^{\circ})}$']
+            labels=[r'$\mathrm{M_{pri}\, (M_{\odot})}$', r'$\mathrm{M_{sec}\, (M_{Jup})}$', 'a (AU)', r'e', r'$\omega$', r'$\mathrm{i\, (^{\circ})}$', r'$\Omega$', r'$\lambda$']
         Semimajor = chain['sau' + npl]
         Ecc = chain['esino' + npl]**2 + chain['ecoso' + npl]**2
+        omeg = np.arcsin(chain['esino'+npl]/np.sqrt(Ecc))
         Inc = chain['inc' + npl]
+        Omeg = chain['asc' + npl]
+        Lam = chain['lam' + npl]
+        #import pdb; pdb.set_trace()
         
-        chain = np.vstack([Mpri, Msec, Semimajor, Ecc, Inc * 180/np.pi]).T
+        chain = np.vstack([Mpri, Msec, Semimajor, Ecc, omeg*180/np.pi, 
+                           Inc*180/np.pi, Omeg*180/np.pi, Lam*180/np.pi]).T
 
         # in corner_modified, the error is modified to keep 2 significant figures
         figure = corner_modified.corner(chain, labels=labels, quantiles=[0.16, 0.5, 0.84], range=[0.999 for l in labels], verbose=False, show_titles=True, title_kwargs={"fontsize": 12}, hist_kwargs={"lw":1.}, label_kwargs={"fontsize":15}, xlabcord=(0.5,-0.45), ylabcord=(-0.45,0.5),  **kwargs)
 
         print("Plotting Corner plot, your plot is generated at " + self.outputdir)
         plt.savefig(os.path.join(self.outputdir, 'Corner_' + self.title)+'.pdf', transparent=True)
+        plt.close()
 
 ###################################################################################################
 ###################################################################################################
@@ -1267,20 +1279,30 @@ class OrbitPlots:
 #diagnostic plots
 
     def plot_chains(self,labels=None,thin=1,alpha=0.1):
-        #labels=['Mpri','Msec','a',r'$\mathrm{\sqrt{e}\, sin\, \omega}$',r'$\mathrm{\sqrt{e}\, cos\, \omega}$','inc','asc','lam']
         print("Generating diagnostic plots to check convergence.")
-
+        
         chain = fits.open(self.MCMCfile)[1].data
         chain = burnin_chain(chain.columns, self.burnin, reshape=False)
+        #import pdb; pdb.set_trace()
         nwalkers, nsteps = chain['lnp'].shape
         ndim = len(pull_chain_params(chain.columns, tuple([[0],[0]]))) + 1
         fig, ax = plt.subplots(nrows=ndim,sharex=True, figsize=(10,10))
         ijit = 0
         for i in range(len(chain.columns)):
-            for walker in range(nwalkers):
+            for walker in range(nwalkers): # Judah: plot the last 3 chains in red
+                if nwalkers-walker<=3:
+                    chain_color='red'
+                    chain_lw=2
+                else:
+                    chain_color='k'
+                    chain_lw=0.5
                 ax[i].plot(chain.columns[i].array[walker],
-                           color="black", alpha=alpha, lw=0.5);
-            ax[i].set_ylabel(chain.columns[i].name,fontsize=15,labelpad = 10)
+                           color=chain_color, alpha=alpha, lw=chain_lw);
+            ax_right = ax[i].twinx()
+            ax_right.set_ylabel(chain.columns[i].name,fontsize=15,labelpad = 30, rotation=0)
+            ax_right.tick_params(axis='both', which='both', length=0)
+            ax_right.set_yticks([])
+            #ax[i].set_ylabel(chain.columns[i].name,fontsize=15,labelpad = 10, rotation=0)
             ax[i].margins(y=0.1)
             for label in ax[i].get_yticklabels():
                 label.set_fontsize(15)
@@ -1295,7 +1317,28 @@ class OrbitPlots:
         for label in ax[i].get_xticklabels():
                 label.set_fontsize(15)
         plt.savefig(os.path.join(self.outputdir, 'Diagnostic_' + self.title)+'.png')
+        plt.close()
+        return
 
+# Judah: Autocorrelation length plot
+    def plot_ACL(self):
+        """
+        Estimate ACL for a handful of parameters in a chain
+        """
+        plt.close('all')
+        chain_table = fits.open(self.MCMCfile)[1].data
+        chain_prestack = burnin_chain(chain_table.columns, self.burnin, reshape=False)
+        chain_stacked = np.stack(chain_prestack) # Stack to get shape (nwalkers, nparams, nsteps)
+
+        nwalkers, nparams, nsteps = np.shape(chain_stacked)
+        print(f"{self.title}'s chain loaded with {nwalkers} walkers, \
+                  \n                             {nparams} parameters, and \
+                  \n                             {nsteps} steps after \
+                  \n                             {self.burnin}-step burnin.")
+
+        autocorr_calc.autocorr_estimator(chain_stacked, self.outputdir, self.title)
+
+        return
 
 #save data
 
@@ -1343,6 +1386,11 @@ class OrbitPlots:
             q_m, q_p = q_50-q_16, q_84-q_50
 
             # modified to keep 2 significant figures in the errors
+            if q_m==0 or q_p==0:
+                q_m = 1e-10
+                q_p = 1e-10
+                print("WARNING: a parameter has zero error. Check posterior_params.txt")
+
             idecimal_m = np.floor(np.log10(np.float('%.1g'%(q_m))))
             idecimal_p = np.floor(np.log10(np.float('%.1g'%(q_p))))
 
@@ -1417,6 +1465,7 @@ class OrbitPlots:
             result += [Mpri, Msec, a, sqesino, sqecoso, inc, asc, lam, plx, period, omega, e, sma, t0, q]
 
             print("Saving posterior parameters to " + self.outputdir)
+            print("BOUTTAA SSAVVVEEE")
             text_file = open(os.path.join(self.outputdir, 'posterior_params_' + self.title) +'.txt', "w")
 
             for i in range(len(label)):
@@ -1427,6 +1476,7 @@ class OrbitPlots:
             text_file.close()
         
         if self.save_params:
+            print("save_params is TRUEEEE")
             print_best_chisq()
             print_posterior(list([float(err) for err in self.err_margin]))
             

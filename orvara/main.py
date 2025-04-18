@@ -25,7 +25,7 @@ import pkg_resources
 
 _loglkwargs = {}
 
-def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, njit=1,
+def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=1,
                            minjit=-20, maxjit=20):
     
     par0 = np.ones((ntemps, nwalkers, 2 + 7 * nplanets))
@@ -60,13 +60,19 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, njit=1,
     # mass and semimajor axis.
     #######################################################################
     
+    # Generate random samples from N(0,1), reshape them to match the shape of par0, and rescale to the values in sig. These are the linear-normal (not log-normal) errors.
     scatter = sig*np.random.randn(np.prod(par0.shape)).reshape(par0.shape)
-    par0 += scatter
-    par0[..., 2::7] = (par0[..., 2::7] - scatter[..., 2::7])*np.exp(scatter[..., 2::7])
-    par0[..., 3::7] = (par0[..., 3::7] - scatter[..., 3::7])*np.exp(scatter[..., 3::7])
 
+    par0 += scatter # Offset the median values by the scatter
+
+    # Judah: omit lines below to sample Msec and a from a normal dist. instead of a log-normal dist.
+    # Now subtract off the linear scatter for the 'Msec' and 'a' parameters, and instead multiply the values by the exponential of that linear scatter.
+    #par0[..., 2::7] = (par0[..., 2::7] - scatter[..., 2::7])*np.exp(scatter[..., 2::7])
+    #par0[..., 3::7] = (par0[..., 3::7] - scatter[..., 3::7])*np.exp(scatter[..., 3::7])
+    #import pdb; pdb.set_trace()
     # Ensure that values are within allowable ranges.
     
+    """
     bounds = [[0, minjit, maxjit],   # jitter
               [1, 1e-4, 1e3],        # mpri (Solar masses)
               [2, 1e-4, 1e3],        # msec (Solar masses)
@@ -74,22 +80,49 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, njit=1,
               [6, 1e-5, np.pi],      # inclination (radians)
               [7, -np.pi, 3*np.pi],  # longitude of ascending node (rad)
               [8, -np.pi, 3*np.pi]]  # long at ref epoch (rad)
+    """
+
+    # Start with bounds for jitter and mpri
+    bounds = [[0, minjit, maxjit],   # jitter
+              [1, 1e-4, 1e3]]        # mpri (Solar masses)
+
+    # Judah: add bounds for each planet. This makes sure all initial guesses are within prior constraints.
+    for i in range(nplanets):
+        min_msec = priors['min_msec{}'.format(i)]
+        min_a = priors['min_a{}'.format(i)]
+        max_a = priors['max_a{}'.format(i)]
+
+        min_msec = max(1e-5, min_msec) # Make sure msec is at least 1e-5
+        pl_bounds = [[7*i+2, min_msec, 1], # msec
+                     [7*i+3, min_a, max_a], # SMA
+                     [7*i+6, 1e-5, np.pi],  # inc.
+                     [7*i+7, -np.pi, 3*np.pi], # \Omega
+                     [7*i+8, -np.pi, 3*np.pi]] # Mean long. at 2010.0
+
+        #if i==2:
+            #import pdb; pdb.set_trace()
+        bounds += pl_bounds # Tack on the companion-specific bounds
         
+    # Judah: apply bounds for each planet to make sure all initial guesses are within prior constraints.
     for i in range(len(bounds)):
+
         j, minval, maxval = bounds[i]
         if j <= 1:
             par0[..., j][par0[..., j] < minval] = minval
             par0[..., j][par0[..., j] > maxval] = maxval
-        else:
-            par0[..., j::7][par0[..., j::7] < minval] = minval
-            par0[..., j::7][par0[..., j::7] > maxval] = maxval
+        else: # Made this exactly the same as above. This makes each planet have its own SMA bounds
+            par0[..., j][par0[..., j] < minval] = minval
+            par0[..., j][par0[..., j] > maxval] = maxval
+
+
+    #import pdb; pdb.set_trace()
             
     # Eccentricity is a special case.  Cap at 0.99.
-    ecc = par0[..., 4::7]**2 + par0[..., 5::7]**2
+    ecc = par0[..., 4::7]**2 + par0[..., 5::7]**2 # Calc ecc from sesinw and secosw
     fac = np.ones(ecc.shape)
-    fac[ecc > 0.99] = np.sqrt(0.99)/np.sqrt(ecc[ecc > 0.99])
-    par0[..., 4::7] *= fac
-    par0[..., 5::7] *= fac
+    fac[ecc > 0.99] = np.sqrt(0.99)/np.sqrt(ecc[ecc > 0.99]) # For ecc>0.99, fac is sqrt(0.99)/sqrt(>0.99)
+    par0[..., 4::7] *= fac # Start at element 4 and mult every 7th element by fac
+    par0[..., 5::7] *= fac # Start at element 5 and mult every 7th element by fac
 
     # Move jitter to the end, add (shuffled) realizations if needed.
     par0_jitlast = np.zeros((ntemps, nwalkers, par0.shape[-1] + njit - 1))
@@ -97,6 +130,9 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, njit=1,
     for i in range(njit):
         random.shuffle(par0[..., 0].T)
         par0_jitlast[..., -1 - i] = par0[..., 0]
+
+
+    #import pdb; pdb.set_trace()
 
     return par0_jitlast
 
@@ -198,6 +234,7 @@ def lnprob(theta, returninfo=False, RVoffsets=False, use_epoch_astrometry=False,
     :param Gf:
     :return:
     """
+    #import pdb; pdb.set_trace()
     model = orbit.Model(data)
     lnp = 0
     for i in range(nplanets):
@@ -205,11 +242,23 @@ def lnprob(theta, returninfo=False, RVoffsets=False, use_epoch_astrometry=False,
         # params.mpri_true is the real mass of the primary. So params.mpri should really be renamed params.interior_mass
         params = orbit.Params(theta, i, nplanets, data.nInst, njitters)
         lnp = lnp + orbit.lnprior(params, minjit=priors['minjit'],
-                                  maxjit=priors['maxjit'])
+                                          maxjit=priors['maxjit'],
+                                          min_msec=priors['min_msec{}'.format(i)],
+                                          max_msec=priors['max_msec{}'.format(i)], 
+                                          min_a=priors['min_a{}'.format(i)],
+                                          max_a=priors['max_a{}'.format(i)],
+                                          min_ecc=priors['min_ecc{}'.format(i)],
+                                          max_ecc=priors['max_ecc{}'.format(i)],)
 
+        #import pdb; pdb.set_trace()
+        #if 0.104794<params.msec<0.104795:
+            #import pdb; pdb.set_trace()
+        #if np.isfinite(lnp):
+            #import pdb; pdb.set_trace()
         if not np.isfinite(lnp):
             model.free()
             params.free()
+            #import pdb; pdb.set_trace()
             return -np.inf
 
         orbit.calc_EA_RPP(data, params, model)
@@ -257,16 +306,24 @@ def get_priors(config):
     priors = {}
     priors['mpri'] = config.getfloat('priors_settings', 'mpri', fallback=1.)
     priors['mpri_sig'] = config.getfloat('priors_settings', 'mpri_sig', fallback=np.inf)
-    # priors on the masses of the companions (labelled 0 though 9). Limit to 10 planet systems.
+    # priors on the masses of the companions (labeled 0 though 9). Limit to 10 planet systems.
+    # Not sure why we go up to 10. We know num_companions from the config file. Keeping for consistency.
     for i in range(10):
         priors[f'm_secondary{i}'] = config.getfloat('priors_settings', f'm_secondary{i}', fallback=1.)
         priors[f'm_secondary{i}_sig'] = config.getfloat('priors_settings', f'm_secondary{i}_sig', fallback=np.inf)
+        priors['min_msec{}'.format(i)] = config.getfloat('priors_settings', 'min_msec{}'.format(i), fallback=0)
+        priors['max_msec{}'.format(i)] = config.getfloat('priors_settings', 'max_msec{}'.format(i), fallback=1)
+        priors['min_a{}'.format(i)] = config.getfloat('priors_settings', 'min_a{}'.format(i), fallback=1)
+        priors['max_a{}'.format(i)] = config.getfloat('priors_settings', 'max_a{}'.format(i), fallback=100)
+        priors['min_ecc{}'.format(i)] = config.getfloat('priors_settings', 'min_ecc{}'.format(i), fallback=0.)
+        priors['max_ecc{}'.format(i)] = config.getfloat('priors_settings', 'max_ecc{}'.format(i), fallback=0.99)
     # priors on the RV jitter. Converting from m/s to orvara internal units.
     priors['minjit'] = config.getfloat('priors_settings', 'minjitter', fallback = 1e-5)
     priors['minjit'] = max(priors['minjit'], 1e-20) # effectively zero, but we need the log
     priors['minjit'] = 2*np.log10(priors['minjit'])
     priors['maxjit'] = config.getfloat('priors_settings', 'maxjitter', fallback = 1e3)
     priors['maxjit'] = 2*np.log10(priors['maxjit'])
+
     if priors['maxjit'] < priors['minjit']:
         raise ValueError("Requested maximum jitter < minimum jitter")
     return priors
@@ -324,7 +381,8 @@ def run():
         njit = data.nInst
     else:
         njit = 1
-    par0 = set_initial_parameters(start_file, ntemps, nplanets, nwalkers, 
+    #import pdb; pdb.set_trace()
+    par0 = set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, 
                                   njit=njit, minjit=priors['minjit'], 
                                   maxjit=priors['maxjit'])
     ndim = par0[0, 0, :].size
@@ -369,65 +427,93 @@ def run():
         
     print('Total Time: %.0f seconds' % (time.time() - start_time))
     print("Mean acceptance fraction (cold chain): {0:.6f}".format(np.mean(sample0.acceptance_fraction[0, :])))
-    # save data
-    if not use_ptemcee:
-        shape = sample0.lnprobability[0].shape
-    else:
-        shape = sample0.logprobability[0].shape
-    parfit = np.zeros((shape[0], shape[1], 9 + data.nInst))
+    #import pdb; pdb.set_trace()
 
-    loglkwargs['returninfo'] = True
-    loglkwargs['RVoffsets'] = True
+    #### Save sampler as .pkl to retrieve high-T chains
+    #import pickle
+    #sampler_file = os.path.join(args.output_dir, '%s_sampler.pkl' % (starname))
+    #with open(sampler_file, 'wb') as file:
+    #    pickle.dump(sample0, file)
+    ####
+
+
+    ## Judah change: iterate over multiple chains corresp. to different Temps. Save a handful
+    save_highT = True
+    if save_highT:
+        num_temps = sample0.logprobability.shape[0] # Assume use_ptemcee==True
+        temp_ind_list = [0, num_temps-1] # Just lowT and highT chains
+    else:
+        temp_ind_list = [0] # Only the lowest temp (default behavior)
+
+    for temp_ind in temp_ind_list:
+
+        sample0_chain = sample0.chain[temp_ind] # Select the chain of the desired temperature
+        
+        # save data
+        if not use_ptemcee:
+            sample0_lnprob = sample0.lnprobability[temp_ind]
+            shape = sample0_lnprob.shape
+        else:
+            sample0_logprob = sample0.logprobability[temp_ind]
+            shape = sample0_logprob.shape
+
+
+        parfit = np.zeros((shape[0], shape[1], 9 + data.nInst))
     
-    for i in range(shape[0]):
-        for j in range(shape[1]):
-            res, RVoffsets = lnprob(sample0.chain[0][i, j], **loglkwargs)
-            parfit[i, j, :9] = [res.plx_best, res.pmra_best, res.pmdec_best,
-                                res.chisq_sep, res.chisq_PA,
-                                res.chisq_H, res.chisq_HG, res.chisq_G, res.chisq_relRV]
+        loglkwargs['returninfo'] = True
+        loglkwargs['RVoffsets'] = True
+    
+        for i in range(shape[0]):
+            for j in range(shape[1]):
+                res, RVoffsets = lnprob(sample0_chain[i, j], **loglkwargs)
+                parfit[i, j, :9] = [res.plx_best, res.pmra_best, res.pmdec_best,
+                                    res.chisq_sep, res.chisq_PA,
+                                    res.chisq_H, res.chisq_HG, res.chisq_G, res.chisq_relRV]
             
-            if data.nInst > 0:
-                parfit[i, j, 9:] = RVoffsets
+                if data.nInst > 0:
+                    parfit[i, j, 9:] = RVoffsets
 
-    colnames = ['mpri']
-    units = ['msun']
-    for i in range(nplanets):
-        colnames += [s + '%d' % (i) for s in ['msec', 'sau', 'esino', 'ecoso',
+        colnames = ['mpri']
+        units = ['msun']
+        for i in range(nplanets):
+            colnames += [s + '%d' % (i) for s in ['msec', 'sau', 'esino', 'ecoso',
                                               'inc', 'asc', 'lam']]
-        units += ['msun', 'au', '', '', 'radians', 'radians', 'radians']
+            units += ['msun', 'au', '', '', 'radians', 'radians', 'radians']
 
-    if njit == 1:
-        colnames += ['jitter']
-        units += ['m/s']
-        sample0.chain[0][..., -1] = 10**(0.5*sample0.chain[0][..., -1])
-    else:
-        for i in range(njit):
-            colnames += ['jitter%d' % (i)]
+        if njit == 1:
+            colnames += ['jitter']
             units += ['m/s']
-        sample0.chain[0][..., -njit:] = 10**(0.5*sample0.chain[0][..., -njit:])
+            sample0.chain[0][..., -1] = 10**(0.5*sample0_chain[..., -1])
+        else:
+            for i in range(njit):
+                colnames += ['jitter%d' % (i)]
+                units += ['m/s']
+            sample0_chain[..., -njit:] = 10**(0.5*sample0_chain[..., -njit:])
 
-    colnames += ['lnp']
-    colnames += ['plx_ML', 'pmra_ML', 'pmdec_ML', 'chisq_sep', 
-                 'chisq_PA', 'chisq_H', 'chisq_HG', 'chisq_G', 'chisq_relRV']
-    units += ['', 'arcsec', 'arcsec/yr', 'arcsec/yr', '', '', '', '', '', '']
-    colnames += ['RV_ZP_%d_ML' % (i) for i in range(data.nInst)]
-    units += ['m/s' for i in range(data.nInst)]
+        colnames += ['lnp']
+        colnames += ['plx_ML', 'pmra_ML', 'pmdec_ML', 'chisq_sep', 
+                     'chisq_PA', 'chisq_H', 'chisq_HG', 'chisq_G', 'chisq_relRV']
+        units += ['', 'arcsec', 'arcsec/yr', 'arcsec/yr', '', '', '', '', '', '']
+        colnames += ['RV_ZP_%d_ML' % (i) for i in range(data.nInst)]
+        units += ['m/s' for i in range(data.nInst)]
 
-    out = fits.HDUList(fits.PrimaryHDU(None, header))
+        out = fits.HDUList(fits.PrimaryHDU(None, header))
 
-    if not use_ptemcee:
-        lnp = sample0.lnprobability[0]
-    else:
-        lnp = sample0.logprobability[0]
+        if not use_ptemcee:
+            lnp = sample0_lnprob
+        else:
+            lnp = sample0_logprob
 
-    out.append(pack_cols(sample0.chain[0], lnp, parfit, colnames, units))
+        out.append(pack_cols(sample0_chain, lnp, parfit, colnames, units))
 
-    for i in range(1000):
-        filename = os.path.join(args.output_dir, '%s_chain%03d.fits' % (starname, i))
-        if not os.path.isfile(filename):
-            print('Writing output to {0}'.format(filename))
-            out.writeto(filename, overwrite=False)
-            break
+        for i in range(1000):
+            #filename = os.path.join(args.output_dir, '%s_chain%03d.fits' % (starname, i))
+            #import pdb; pdb.set_trace()
+            filename = os.path.join(args.output_dir, '{}_Temp{}_chain{}.fits'.format(starname, temp_ind, '{}'.format(i).zfill(3)))
+            if not os.path.isfile(filename):
+                print('Writing output to {0}'.format(filename))
+                out.writeto(filename, overwrite=False)
+                break
 
     return out
 
