@@ -23,6 +23,8 @@ from orvara.config import parse_args
 from orvara.format_fits import make_header, pack_cols
 import pkg_resources
 
+import scipy
+
 _loglkwargs = {}
 
 def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=1,
@@ -60,7 +62,7 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=
     # mass and semimajor axis.
     #######################################################################
     
-    # Generate random samples from N(0,1), reshape them to match the shape of par0, and rescale to the values in sig. These are the linear-normal (not log-normal) errors.
+    # Generate random samples from N(0,1), reshape them to match the shape of par0, and rescale to the values in sig. These are the normal (not log-normal) errors.
     scatter = sig*np.random.randn(np.prod(par0.shape)).reshape(par0.shape)
 
     par0 += scatter # Offset the median values by the scatter
@@ -394,47 +396,63 @@ def run():
     _loglkwargs = loglkwargs
     # run sampler without feeding it loglkwargs directly, since loglkwargs contains non-picklable C objects.
 
-    try:
-        use_ptemcee = False
-        sample0 = emcee.PTSampler(ntemps, nwalkers, ndim, avoid_pickle_lnprob, return_one, threads=nthreads)
-        print('Using emcee.PTSampler.')
-    except:
-        use_ptemcee = True
-        sample0 = PTSampler(ntemps=ntemps, nwalkers=nwalkers, dim=ndim,
+    use_dynesty=True
+    if use_dynesty:
+
+        #import pdb; pdb.set_trace()
+
+        #def ptform(u): # Most simple: uniform prior
+            #return u
+
+        import dynesty
+        #import pdb; pdb.set_trace()
+        #sample0 = dynesty.NestedSampler(avoid_pickle_lnprob, dynesty_prior, ndim)
+        dsampler = dynesty.DynamicNestedSampler(avoid_pickle_lnprob, dynesty_prior, ndim, bound='multi')
+
+        print('Using dynesty')
+        dsampler.run_nested()
+        dresults = dsampler.results
+        sdfsd
+        
+
+    else:
+        try:
+            use_ptemcee = False
+            sample0 = emcee.PTSampler(ntemps, nwalkers, ndim, avoid_pickle_lnprob, return_one, threads=nthreads)
+            print('Using emcee.PTSampler.')
+        except:
+            use_ptemcee = True
+            sample0 = PTSampler(ntemps=ntemps, nwalkers=nwalkers, dim=ndim,
                             logl=avoid_pickle_lnprob, logp=return_one,
                             threads=nthreads)
         print('Using ptemcee.')
 
-    print("Running MCMC ... ")
-    #sample0.run_mcmc(par0, nstep, **samplekwargs)
-    #add a progress bar
-    width = 30
-    N = min(100, nstep//thin)
-    n_taken = 0
-    sys.stdout.write("[{0}]  {1}%".format(' ' * width, 0))
-    for ipct in range(N):
-        dn = (((nstep*(ipct + 1))//N - n_taken)//thin)*thin
-        n_taken += dn
-        if ipct == 0:
-            sample0.run_mcmc(par0, dn, **samplekwargs)
-        else:
-            # Continue from last step
-            sample0.run_mcmc(sample0.chain[..., -1, :], dn, **samplekwargs)
-        n = int((width+1) * float(ipct + 1) / N)
-        sys.stdout.write("\r[{0}{1}]".format('#' * n, ' ' * (width - n)))
-        sys.stdout.write("%3d%%" % (int(100*(ipct + 1)/N)))
-    sys.stdout.write("\n")
+        print("Running MCMC ... ")
+        #sample0.run_mcmc(par0, nstep, **samplekwargs)
+        #add a progress bar
+        width = 30
+        N = min(100, nstep//thin)
+        n_taken = 0
+        sys.stdout.write("[{0}]  {1}%".format(' ' * width, 0))
+        for ipct in range(N):
+            dn = (((nstep*(ipct + 1))//N - n_taken)//thin)*thin
+            n_taken += dn
+            #import pdb; pdb.set_trace()
+            if ipct == 0:
+                sample0.run_mcmc(par0, dn, **samplekwargs)
+            else:
+                # Continue from last step
+                sample0.run_mcmc(sample0.chain[..., -1, :], dn, **samplekwargs)
+            n = int((width+1) * float(ipct + 1) / N)
+            sys.stdout.write("\r[{0}{1}]".format('#' * n, ' ' * (width - n)))
+            sys.stdout.write("%3d%%" % (int(100*(ipct + 1)/N)))
+        sys.stdout.write("\n")
         
-    print('Total Time: %.0f seconds' % (time.time() - start_time))
-    print("Mean acceptance fraction (cold chain): {0:.6f}".format(np.mean(sample0.acceptance_fraction[0, :])))
-    #import pdb; pdb.set_trace()
+        print('Total Time: %.0f seconds' % (time.time() - start_time))
+        print("Mean acceptance fraction (cold chain):     {0:.6f}".format(np.mean(sample0.acceptance_fraction[0, :])))
+        #import pdb; pdb.set_trace()
 
-    #### Save sampler as .pkl to retrieve high-T chains
-    #import pickle
-    #sampler_file = os.path.join(args.output_dir, '%s_sampler.pkl' % (starname))
-    #with open(sampler_file, 'wb') as file:
-    #    pickle.dump(sample0, file)
-    ####
+
 
 
     ## Judah change: iterate over multiple chains corresp. to different Temps. Save a handful
@@ -517,6 +535,80 @@ def run():
 
     return out
 
+def dynesty_prior(u):
+    """
+    Transforms draws from an n-dimensional
+    unit cube, Unif[0,1), into draws from
+    the appropriate prior distributions.
+
+    There should be 2 + 7*n parameters, where
+    n is the number of planets in the model.
+    The first 2 params are jitter and Mprimary
+    """
+    x = np.array(u) # Copy of u
+
+    # First, get the priors from the config file
+    args = parse_args() # Parses arguments to the original script call
+    config = ConfigParser()
+    config.read(args.config_file)
+    priors = get_priors(config)
+    nplanets = config.getint('mcmc_settings', 'nplanets')
+
+
+    ## Jitter: use hard log-limits
+    ## Note: jit was moved to the END in set_initial_parameters
+    x[-1] = u[-1]*(priors['maxjit']-priors['minjit']) + priors['minjit']
+
+    ## Msec: normal
+    x[0] = scipy.stats.norm.ppf(u[1], loc=priors['mpri'], scale=priors['mpri_sig'])
+
+
+    for i in range(nplanets):
+        #import pdb; pdb.set_trace()
+        ## Msec: hard limits
+        x[7*i+1] = u[7*i+1]*(priors[f'max_msec{i}']-priors[f'min_msec{i}']) + priors[f'min_msec{i}']
+
+        ## SMA
+        x[7*i+2] = u[7*i+2]*(priors[f'max_a{i}']-priors[f'min_a{i}']) + priors[f'min_a{i}']
+
+        ## sesino and secoso are simply uniform between [0,1)
+        x[7*i+3] = u[7*i+3]
+        x[7*i+4] = u[7*i+4]
+
+        ## cos(i) should be uniform, so i should be cos^-1(u), where u is drawn uniformly
+        x[7*i+5] = np.arccos(u[7*i+5])
+
+        ## \Omega, and \lambda are simply uniform between [0,2pi)
+        x[7*i+6] = u[7*i+6]*2*np.pi
+        x[7*i+7] = u[7*i+7]*2*np.pi
+
+
+    return x
+
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     run()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

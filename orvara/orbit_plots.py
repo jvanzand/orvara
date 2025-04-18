@@ -1465,7 +1465,6 @@ class OrbitPlots:
             result += [Mpri, Msec, a, sqesino, sqecoso, inc, asc, lam, plx, period, omega, e, sma, t0, q]
 
             print("Saving posterior parameters to " + self.outputdir)
-            print("BOUTTAA SSAVVVEEE")
             text_file = open(os.path.join(self.outputdir, 'posterior_params_' + self.title) +'.txt', "w")
 
             for i in range(len(label)):
