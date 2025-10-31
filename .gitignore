@@ -3,8 +3,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Everything in judah dir 
+# Everything in judah dir
 judah/*
+
+# All system-specific astrometry files downloaded automatically
+#tests/data/hip1/*
+#tests/data/hip2/*
+#tests/data/gaia/*
+
+#!tests/data/hip1/
+#!tests/data/hip2/
+#!tests/data/gaia/
+
+# All system-specific astrometry that gets auto-downloaded
+orvara/tests/data/
 
 # C extensions
 *.so
