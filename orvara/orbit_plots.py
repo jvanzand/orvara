@@ -194,12 +194,14 @@ class OrbitPlots:
         epoch_obs = rvdat[:, 0]
         RV_obs = rvdat[:, 1]
         RV_obs_err = rvdat[:, 2]
+        #import pdb; pdb.set_trace()
         try:
             RVinst = (rvdat[:, 3]).astype(np.int32)
             self.RVinst = RVinst
             # Check to see that the column we loaded was an integer
             assert np.all(RVinst == rvdat[:, 3])
             nInst = int(np.amax(rvdat[:, 3]) + 1)
+            #nInst = len(set(rvdat[:,3])) # Judah: simply count unique inst numbers. Avoid bad numbering errs
             
             self.multi_instr = True
         except:
@@ -367,6 +369,11 @@ class OrbitPlots:
             dec_obs = self.relsep_obs * np.cos(self.PA_obs*np.pi /180.)
             ax.scatter(ra_obs, dec_obs, s=45, facecolors=self.marker_color, edgecolors='none', zorder=99)
             ax.scatter(ra_obs, dec_obs, s=45, facecolors='none', edgecolors='k', zorder=100)
+            
+            # Judah: plot predicted astrometric point, if provided in astrometric_prediction_plot() below
+            if 'pred_ra' in dir(self):
+                ax.scatter([self.x_pred], [self.y_pred], facecolors='red', marker='x', zorder=99)
+                
 
         # plot the predicted positions (set in config.ini)
         epoch_int = []
@@ -624,6 +631,7 @@ class OrbitPlots:
         # ax1
         ax1.get_shared_x_axes().join(ax1, ax2)
         range_ep_obs = max(all_RV_eps) - min(all_RV_eps)
+        #import pdb; pdb.set_trace()
         RV_obs_max = max([max(self.RV_obs_dic[i] + orb_ml.offset[i]) for i in range(self.nInst)])
         RV_obs_min = min([min(self.RV_obs_dic[i] + orb_ml.offset[i]) for i in range(self.nInst)])
         range_RV_obs = RV_obs_max - RV_obs_min
@@ -715,7 +723,12 @@ class OrbitPlots:
                 ep_relAst_obs_calendar.append(self.JD_to_calendar(self.ep_relAst_obs[i]))
             ax1.errorbar(ep_relAst_obs_calendar, self.relsep_obs, yerr=self.relsep_obs_err, color=self.marker_color, fmt='o', ecolor='black', capsize=4, markersize=5, zorder=299)
             ax1.scatter(ep_relAst_obs_calendar, self.relsep_obs, s=60, facecolors=self.marker_color, edgecolors='k', alpha=1, zorder=300)
-
+            
+            # Judah: plot predicted astrometric point, if provided in astrometric_prediction_plot() below
+            if 'pred_ra' in dir(self):
+                ax1.scatter(self.pred_year, self.pred_sep, s=60, facecolors='red', marker='x', alpha=1, zorder=300)
+                    
+                    
             dat_OC = self.relsep_obs - orb_ml.relsep[self.ast_indx]
             
             ax2.errorbar(ep_relAst_obs_calendar, dat_OC, yerr=self.relsep_obs_err, color=self.marker_color, fmt='o', ecolor='black', capsize=4, markersize=5, zorder=299)
@@ -724,10 +737,24 @@ class OrbitPlots:
             # axes settings
             # ax1
             ax1.get_shared_x_axes().join(ax1, ax2)
-            range_eprA_obs = max(ep_relAst_obs_calendar) - min(ep_relAst_obs_calendar)
-            range_relsep_obs = max(self.relsep_obs)  - min(self.relsep_obs)
-            ax1.set_xlim(min(ep_relAst_obs_calendar) - range_eprA_obs/8., max(ep_relAst_obs_calendar) + range_eprA_obs/8.)
-            ax1.set_ylim(min(self.relsep_obs) - range_relsep_obs/2., max(self.relsep_obs) + range_relsep_obs/2.)
+            
+            
+            # Judah: modify axis lims to include predicted point, if it was provided
+            #######################
+            yrs_to_calc_xlims = ep_relAst_obs_calendar
+            relseps_to_calc_ylims = list(self.relsep_obs)
+            
+            if 'pred_ra' in dir(self): # If there is a prediction point, include it in the axis lims calculation
+                yrs_to_calc_xlims.append(self.pred_year) # Include the predicted year
+                relseps_to_calc_ylims.append(self.pred_sep) # Include the predicted relsep
+                
+            range_eprA_obs = max(yrs_to_calc_xlims) - min(yrs_to_calc_xlims)
+            range_relsep_obs = max(relseps_to_calc_ylims)  - min(relseps_to_calc_ylims)
+            ax1.set_xlim(min(yrs_to_calc_xlims) - range_eprA_obs/8., max(yrs_to_calc_xlims) + range_eprA_obs/8.)
+            #import pdb; pdb.set_trace()
+            ax1.set_ylim(min(relseps_to_calc_ylims) - range_relsep_obs/2., max(relseps_to_calc_ylims) + range_relsep_obs/2.)
+            ########################
+            
             ax1.xaxis.set_major_formatter(NullFormatter())
             ax1.xaxis.set_minor_locator(AutoMinorLocator())
             ax1.yaxis.set_minor_locator(AutoMinorLocator())
@@ -830,6 +857,13 @@ class OrbitPlots:
                 ep_relAst_obs_calendar.append(self.JD_to_calendar(self.ep_relAst_obs[i]))
             ax1.errorbar(ep_relAst_obs_calendar, self.PA_obs, yerr=self.PA_obs_err, color=self.marker_color, fmt='o', ecolor='black', capsize=4, markersize=5, zorder=299)
             ax1.scatter(ep_relAst_obs_calendar, self.PA_obs, s=60, facecolors=self.marker_color, edgecolors='k', alpha=1, zorder=300)
+            
+            # Judah: plot predicted astrometric point, if provided in astrometric_prediction_plot() below
+            if 'pred_ra' in dir(self):                
+                ax1.scatter(self.pred_year, self.pred_pa, s=60, facecolors='red', marker='x', alpha=1, zorder=300)
+            
+            
+            
             dat_OC = self.PA_obs - orb_ml.PA[self.ast_indx]
 
             ax2.errorbar(ep_relAst_obs_calendar, dat_OC, yerr=self.PA_obs_err, color=self.marker_color, fmt='o', ecolor='black', capsize=4, markersize=5, zorder=299)
@@ -838,10 +872,23 @@ class OrbitPlots:
             # axes settings
             # ax1
             ax1.get_shared_x_axes().join(ax1, ax2)
-            range_eprA_obs = max(ep_relAst_obs_calendar) - min(ep_relAst_obs_calendar)
-            range_PA_obs = max(self.PA_obs)  - min(self.PA_obs)
-            ax1.set_xlim(min(ep_relAst_obs_calendar) - range_eprA_obs/8., max(ep_relAst_obs_calendar) + range_eprA_obs/8.)
-            ax1.set_ylim(min(self.PA_obs) - range_PA_obs/5., max(self.PA_obs) + range_PA_obs/5.)
+            
+            # Judah: modify axis lims to include predicted point, if it was provided
+            #######################
+            yrs_to_calc_xlims = ep_relAst_obs_calendar
+            PAs_to_calc_ylims = list(self.PA_obs)
+            
+            if 'pred_ra' in dir(self): # If there is a prediction point, include it in the axis lims calculation
+                yrs_to_calc_xlims.append(self.pred_year) # Include the predicted year
+                PAs_to_calc_ylims.append(self.pred_pa) # Include the predicted relsep
+                
+            range_eprA_obs = max(yrs_to_calc_xlims) - min(yrs_to_calc_xlims)
+            range_PA_obs = max(PAs_to_calc_ylims)  - min(PAs_to_calc_ylims)
+            ax1.set_xlim(min(yrs_to_calc_xlims) - range_eprA_obs/8., max(yrs_to_calc_xlims) + range_eprA_obs/8.)
+            #import pdb; pdb.set_trace()
+            ax1.set_ylim(min(PAs_to_calc_ylims) - range_PA_obs/5., max(PAs_to_calc_ylims) + range_PA_obs/5.)
+            #######################
+            
             ax1.xaxis.set_major_formatter(NullFormatter())
             ax1.xaxis.set_minor_locator(AutoMinorLocator())
             ax1.yaxis.set_minor_locator(AutoMinorLocator())
@@ -1149,6 +1196,49 @@ class OrbitPlots:
         mean_ra, mean_dec = np.mean(ra), np.mean(dec)
         ra_range, dec_range = (mean_ra-5*ra_err, mean_ra+5*ra_err), (mean_dec-5*dec_err,mean_dec+5*dec_err)
         print(f'RA: {round(mean_ra, 4)} +- {round(ra_err, 4)} mas, 'f'Dec: {round(mean_dec, 4)} +- {round(dec_err, 4)} mas')
+        
+        self.pred_jd = JDepochs
+        self.pred_ra = mean_ra
+        self.pred_dec = mean_dec
+        
+        # Judah: calculate values to plot predicted astrometric point
+        #############################################################
+        pred_ra = self.pred_ra/1000 # Convert to arcsec. This is DELTA RA (dist. from primary)
+        pred_dec = self.pred_dec/1000 # Convert to arcsec. This is DELTA Dec (dist. from primary)
+        sep = np.sqrt(pred_ra**2+pred_dec**2)
+        pa_from_posRA = np.arccos(np.dot([1,0], [pred_ra, pred_dec]) / sep) # PA wrt +RA axis. +90 deg for true PA
+        if pred_dec<0: # Range of arccos() is 0-pi, so if the object is on bottom half the plot, adjust manually
+            pa_from_posRA = 2*np.pi-pa_from_posRA
+        x_pred = sep*np.cos(pa_from_posRA)
+        y_pred = sep*np.sin(pa_from_posRA)
+        #####################################################################
+            
+        ## Now also calculate the decimal year and the PA (measured from North, with +RA pointing left)
+        ## These will be used in the PA and relsep plots below
+        pred_year = float(Time(self.pred_jd, format='jd').decimalyear)
+                
+        pa_from_posDec = pa_from_posRA-np.pi/2 # Cut out 90 deg to get PA from +Dec (aka North)
+        pa_from_posDec_reversed = 2*np.pi-pa_from_posDec # 2pi-angle to swap +/- RA axes (aka swap left/right)
+        pred_pa_deg = pa_from_posDec_reversed * 180/np.pi
+        ######################################################################
+        
+        ## To plot predicted point in astrometric orbit plot
+        self.x_pred = x_pred
+        self.y_pred = y_pred
+            
+        ## To plot predicted point in PA and relsep plots
+        self.pred_year = pred_year
+        self.pred_pa = pred_pa_deg
+        self.pred_sep = sep
+        
+        #import pdb; pdb.set_trace()
+        print(f"Predicted location of the companion at {pred_year}: ")
+        print(f"   delta_RA: {pred_ra:.5f} arcsec, delta_Dec: {pred_dec:.5f} arcsec")
+        print(f"   Sep: {sep:.5f} arcsec, PA: {pred_pa_deg:.5f} deg")
+        #############################################################
+        
+        
+
         k = kde.gaussian_kde([ra, dec])
         xi, yi = np.mgrid[min(ra_range):max(ra_range):nbins * 1j, min(dec_range):max(dec_range):nbins * 1j]
         zi = k(np.vstack([xi.flatten(), yi.flatten()])).reshape(xi.shape)

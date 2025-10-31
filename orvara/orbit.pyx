@@ -1677,7 +1677,7 @@ def lnprior(Params par, double minjit=-20, double maxjit=20, double min_msec=0, 
     cdef int i
     cdef double pi = 3.14159265358979323846264338327950288 # np.pi
     cdef double zeroprior = -np.inf
-    cdef double ecc = (par.esino)**2 + (par.ecoso)**2
+    cdef double ecc = np.sqrt((par.esino)**2 + (par.ecoso)**2)
 
     #import pdb; pdb.set_trace()
     if par.sau < min_a or par.mpri_true <= 0 or par.msec <= 0 or par.ecc >= 1:
@@ -1700,15 +1700,15 @@ def lnprior(Params par, double minjit=-20, double maxjit=20, double min_msec=0, 
     #if par.inc<0 or par.inc>pi/2: # Judah addition for RV + HGCA applications
      #   return zeroprior
     if ecc<0 or ecc>0.99:
-        #print("THIS ONE 6")
+        #print("THIS ONE 6", ecc)
         return zeroprior
     if ecc<min_ecc or ecc>max_ecc:
-        #print("THIS ONE 7")
+        #print("THIS ONE 7", min_ecc, max_ecc, ecc)
         return zeroprior
-    if par.lam<0 or par.lam>2*np.pi:
+    #if par.lam<0 or par.lam>2*np.pi:
         #print("THIS ONE 8")
-        return zeroprior
-    if par.asc<0 or par.asc>2*np.pi:
+        #return zeroprior
+    if par.asc<0 or par.asc>2*pi:
         #print("THIS ONE 9")
         return zeroprior
     

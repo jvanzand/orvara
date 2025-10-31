@@ -164,16 +164,16 @@ def run():
     checkconv = config.getboolean('plotting', 'check_convergence', fallback=False)
 
 
-    OP_list = initialize_plot_options(config)
+    OP_list = initialize_plot_options(config) # 1 OP (object w/ plotting options) per planet
     #import pdb; pdb.set_trace()
     for OPs in OP_list: # Turned into loop by Judah to save a set of plots for each companion
         if checkconv:
             OPs.plot_chains()
             OPs.plot_ACL() # Added by Judah. Plot autocorrelation length
+        if plot_astr_pred: # Judah: do astr_pred BEFORE astro, relsep, and PA plots so prediction pt can be plotted
+            OPs.astrometric_prediction_plot()
         if plot_astr:
             OPs.astrometry()
-        if plot_astr_pred:
-            OPs.astrometric_prediction_plot()
         if plot_rv_full:
             OPs.RV_fullorbit()
         if plot_rv:

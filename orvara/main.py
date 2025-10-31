@@ -28,7 +28,8 @@ _loglkwargs = {}
 def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=1,
                            minjit=-20, maxjit=20):
     
-    par0 = np.ones((ntemps, nwalkers, 2 + 7 * nplanets))
+    ndim = 2 + 7*nplanets
+    par0 = np.ones((ntemps, nwalkers, ndim))
 
     if start_file.lower() == 'none':
         mpri = 1
@@ -71,16 +72,28 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=
     #par0[..., 3::7] = (par0[..., 3::7] - scatter[..., 3::7])*np.exp(scatter[..., 3::7])
     #import pdb; pdb.set_trace()
     # Ensure that values are within allowable ranges.
+
+    ## Judah: allow for initialization using previous chains
+    #load_chain_path = "/data/user/judahvz/planet_bd/orvara/judah/outputs/HD38529/HD38529_Temp0_chain000.fits"
+    load_chain_path=None
+    if load_chain_path is not None:
+        old_chain = fits.open(load_chain_path)[1].data
+        ndim_old, nsteps_old = np.shape(old_chain[0])
+        nwalkers_old = np.shape(old_chain)[0]
+        if nwalkers_old != nwalkers:
+            raise Exception(f"Nwalkers supplied for this run ({nwalkers}) do not match Nwalkers in loaded chains ({nwalkers_old}).")
+
+        old_chain_reshaped = np.empty((nsteps_old, nwalkers_old, ndim_old)) # Same order as par0
+
+        for i in range(nwalkers):
+            old_chain_reshaped[:, i, :] = np.array(old_chain[i]).T # transpose to get (nsteps, ndim)
+
+        par0_singlechain = old_chain_reshaped[-1, :, :ndim] # -1 to get the last step, : to take all walkers, ndim to take only the params in par0 and none of the extra ones in the saved chains. The order of the first ndim params is M_pri, {7 orbital params per planet}, jitter.
+        #import pdb; pdb.set_trace()
+        par0 = np.repeat(par0_singlechain[np.newaxis, :, :], ntemps, axis=0) # Expand so there is a start pt for each temperature
+        
     
-    """
-    bounds = [[0, minjit, maxjit],   # jitter
-              [1, 1e-4, 1e3],        # mpri (Solar masses)
-              [2, 1e-4, 1e3],        # msec (Solar masses)
-              [3, 1e-5, 2e5],        # semimajor axis (AU)
-              [6, 1e-5, np.pi],      # inclination (radians)
-              [7, -np.pi, 3*np.pi],  # longitude of ascending node (rad)
-              [8, -np.pi, 3*np.pi]]  # long at ref epoch (rad)
-    """
+
 
     # Start with bounds for jitter and mpri
     bounds = [[0, minjit, maxjit],   # jitter
@@ -91,6 +104,8 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=
         min_msec = priors['min_msec{}'.format(i)]
         min_a = priors['min_a{}'.format(i)]
         max_a = priors['max_a{}'.format(i)]
+        #min_e = priors['min_ecc{}'.format(i)]
+        #max_e = priors['max_ecc{}'.format(i)]
 
         min_msec = max(1e-5, min_msec) # Make sure msec is at least 1e-5
         pl_bounds = [[7*i+2, min_msec, 1], # msec
@@ -107,22 +122,41 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=
     for i in range(len(bounds)):
 
         j, minval, maxval = bounds[i]
-        if j <= 1:
-            par0[..., j][par0[..., j] < minval] = minval
-            par0[..., j][par0[..., j] > maxval] = maxval
-        else: # Made this exactly the same as above. This makes each planet have its own SMA bounds
-            par0[..., j][par0[..., j] < minval] = minval
-            par0[..., j][par0[..., j] > maxval] = maxval
+	
+        par0[..., j][par0[..., j] < minval] = minval
+        par0[..., j][par0[..., j] > maxval] = maxval
+
+        #print("Check EM", minval, maxval, par0[...,j].min(), par0[...,j].max())
+
+        #if j <= 1:
+        #    par0[..., j][par0[..., j] < minval] = minval
+        #    par0[..., j][par0[..., j] > maxval] = maxval
+        #else: # Made this exactly the same as above. This makes each planet have its own SMA bounds
+        #    par0[..., j][par0[..., j] < minval] = minval
+        #    par0[..., j][par0[..., j] > maxval] = maxval
+
 
 
     #import pdb; pdb.set_trace()
             
     # Eccentricity is a special case.  Cap at 0.99.
-    ecc = par0[..., 4::7]**2 + par0[..., 5::7]**2 # Calc ecc from sesinw and secosw
-    fac = np.ones(ecc.shape)
-    fac[ecc > 0.99] = np.sqrt(0.99)/np.sqrt(ecc[ecc > 0.99]) # For ecc>0.99, fac is sqrt(0.99)/sqrt(>0.99)
-    par0[..., 4::7] *= fac # Start at element 4 and mult every 7th element by fac
-    par0[..., 5::7] *= fac # Start at element 5 and mult every 7th element by fac
+    for i in range(nplanets):
+        min_e = priors['min_ecc{}'.format(i)]
+        max_e = priors['max_ecc{}'.format(i)]
+
+        ecc = par0[..., 7*i+4]**2 + par0[..., 7*i+5]**2 # Calc ecc from sesinw and secosw
+        fac = np.ones(ecc.shape)
+        fac[ecc > 0.99] = np.sqrt(0.989)/np.sqrt(ecc[ecc > 0.99]) # Convert >0.99 to 0.989 (avoid float err)
+        par0[..., 7*i+4] *= fac # Start at element 4 and mult every 7th element by fac
+        par0[..., 7*i+5] *= fac # Start at element 5 and mult every 7th element by fac
+
+
+
+    #ecc = par0[..., 4::7]**2 + par0[..., 5::7]**2 # Calc ecc from sesinw and secosw
+    #fac = np.ones(ecc.shape)
+    #fac[ecc > 0.99] = np.sqrt(0.99)/np.sqrt(ecc[ecc > 0.99]) # For ecc>0.99, fac is sqrt(0.99)/sqrt(>0.99)
+    #par0[..., 4::7] *= fac # Start at element 4 and mult every 7th element by fac
+    #par0[..., 5::7] *= fac # Start at element 5 and mult every 7th element by fac
 
     # Move jitter to the end, add (shuffled) realizations if needed.
     par0_jitlast = np.zeros((ntemps, nwalkers, par0.shape[-1] + njit - 1))
@@ -385,7 +419,9 @@ def run():
     par0 = set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, 
                                   njit=njit, minjit=priors['minjit'], 
                                   maxjit=priors['maxjit'])
+
     ndim = par0[0, 0, :].size
+
 
     # set arguments for emcee PTSampler and the log-likelyhood (lnprob)
     samplekwargs = {'thin': thin}
@@ -416,6 +452,7 @@ def run():
         dn = (((nstep*(ipct + 1))//N - n_taken)//thin)*thin
         n_taken += dn
         if ipct == 0:
+            #import pdb; pdb.set_trace()
             sample0.run_mcmc(par0, dn, **samplekwargs)
         else:
             # Continue from last step
@@ -429,16 +466,10 @@ def run():
     print("Mean acceptance fraction (cold chain): {0:.6f}".format(np.mean(sample0.acceptance_fraction[0, :])))
     #import pdb; pdb.set_trace()
 
-    #### Save sampler as .pkl to retrieve high-T chains
-    #import pickle
-    #sampler_file = os.path.join(args.output_dir, '%s_sampler.pkl' % (starname))
-    #with open(sampler_file, 'wb') as file:
-    #    pickle.dump(sample0, file)
-    ####
 
 
     ## Judah change: iterate over multiple chains corresp. to different Temps. Save a handful
-    save_highT = True
+    save_highT = False
     if save_highT:
         num_temps = sample0.logprobability.shape[0] # Assume use_ptemcee==True
         temp_ind_list = [0, num_temps-1] # Just lowT and highT chains
