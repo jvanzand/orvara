@@ -1668,8 +1668,8 @@ def calcL(Data data, Params par, Model model, bint freemodel=True,
 # the quantity out.
 ######################################################################
 
-def lnprior(Params par, double minjit=-20, double maxjit=20, double min_msec=0, double max_msec=1, double min_a=0.00001, double max_a=100, double min_ecc=0., double max_ecc=0.99):
-    # Judah added min_a/max_a and min_ecc/max_ecc priors
+def lnprior(Params par, double minjit=-20, double maxjit=20, double min_msec=0, double max_msec=1, double min_a=0.00001, double max_a=100, double min_ecc=0., double max_ecc=0.99, double min_inc=0, double max_inc=np.pi):
+    # Judah added mix/max priors for a, e, and i
     cdef extern from "math.h" nogil:
         double sin(double _x)
         double log(double _x)
@@ -1677,9 +1677,8 @@ def lnprior(Params par, double minjit=-20, double maxjit=20, double min_msec=0, 
     cdef int i
     cdef double pi = 3.14159265358979323846264338327950288 # np.pi
     cdef double zeroprior = -np.inf
-    cdef double ecc = np.sqrt((par.esino)**2 + (par.ecoso)**2)
+    cdef double ecc = (par.esino)**2 + (par.ecoso)**2
 
-    #import pdb; pdb.set_trace()
     if par.sau < min_a or par.mpri_true <= 0 or par.msec <= 0 or par.ecc >= 1:
         #print("THIS ONE 1 ", par.sau, min_a, par.mpri_true, par.msec, par.ecc)
         return zeroprior
@@ -1693,23 +1692,25 @@ def lnprior(Params par, double minjit=-20, double maxjit=20, double min_msec=0, 
         #print("THIS ONE 4")
         return zeroprior
     if par.msec<min_msec or par.msec>max_msec:
-        return zeroprior
-    if par.sau<=0:
         #print("THIS ONE 5")
         return zeroprior
-    #if par.inc<0 or par.inc>pi/2: # Judah addition for RV + HGCA applications
-     #   return zeroprior
+    if par.sau<=0:
+        #print("THIS ONE 6")
+        return zeroprior
+    if par.inc<min_inc or par.inc>max_inc: # Judah addition
+        #print("THIS ONE 7")
+        return zeroprior
     if ecc<0 or ecc>0.99:
-        #print("THIS ONE 6", ecc)
+        #print("THIS ONE 8", ecc)
         return zeroprior
     if ecc<min_ecc or ecc>max_ecc:
-        #print("THIS ONE 7", min_ecc, max_ecc, ecc)
+        #print("THIS ONE 9", min_ecc, max_ecc, ecc)
         return zeroprior
     #if par.lam<0 or par.lam>2*np.pi:
         #print("THIS ONE 8")
         #return zeroprior
     if par.asc<0 or par.asc>2*pi:
-        #print("THIS ONE 9")
+        #print("THIS ONE 10")
         return zeroprior
     
 

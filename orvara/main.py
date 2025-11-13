@@ -104,13 +104,15 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=
         min_msec = priors['min_msec{}'.format(i)]
         min_a = priors['min_a{}'.format(i)]
         max_a = priors['max_a{}'.format(i)]
+        min_inc = priors['min_inc{}'.format(i)]
+        max_inc = priors['max_inc{}'.format(i)]
         #min_e = priors['min_ecc{}'.format(i)]
         #max_e = priors['max_ecc{}'.format(i)]
 
         min_msec = max(1e-5, min_msec) # Make sure msec is at least 1e-5
         pl_bounds = [[7*i+2, min_msec, 1], # msec
                      [7*i+3, min_a, max_a], # SMA
-                     [7*i+6, 1e-5, np.pi],  # inc.
+                     [7*i+6, min_inc, max_inc],  # inc.
                      [7*i+7, -np.pi, 3*np.pi], # \Omega
                      [7*i+8, -np.pi, 3*np.pi]] # Mean long. at 2010.0
 
@@ -150,7 +152,7 @@ def set_initial_parameters(start_file, ntemps, nplanets, nwalkers, priors, njit=
         par0[..., 7*i+4] *= fac # Start at element 4 and mult every 7th element by fac
         par0[..., 7*i+5] *= fac # Start at element 5 and mult every 7th element by fac
 
-
+    #import pdb; pdb.set_trace()
 
     #ecc = par0[..., 4::7]**2 + par0[..., 5::7]**2 # Calc ecc from sesinw and secosw
     #fac = np.ones(ecc.shape)
@@ -275,6 +277,7 @@ def lnprob(theta, returninfo=False, RVoffsets=False, use_epoch_astrometry=False,
         # Note that params.mpri is really the mass contained in the primary + companions inner to the current planet.
         # params.mpri_true is the real mass of the primary. So params.mpri should really be renamed params.interior_mass
         params = orbit.Params(theta, i, nplanets, data.nInst, njitters)
+        #import pdb; pdb.set_trace()
         lnp = lnp + orbit.lnprior(params, minjit=priors['minjit'],
                                           maxjit=priors['maxjit'],
                                           min_msec=priors['min_msec{}'.format(i)],
@@ -282,7 +285,9 @@ def lnprob(theta, returninfo=False, RVoffsets=False, use_epoch_astrometry=False,
                                           min_a=priors['min_a{}'.format(i)],
                                           max_a=priors['max_a{}'.format(i)],
                                           min_ecc=priors['min_ecc{}'.format(i)],
-                                          max_ecc=priors['max_ecc{}'.format(i)],)
+                                          max_ecc=priors['max_ecc{}'.format(i)],
+                                          min_inc=priors['min_inc{}'.format(i)],
+                                          max_inc=priors['max_inc{}'.format(i)],)
 
         #import pdb; pdb.set_trace()
         #if 0.104794<params.msec<0.104795:
@@ -351,6 +356,8 @@ def get_priors(config):
         priors['max_a{}'.format(i)] = config.getfloat('priors_settings', 'max_a{}'.format(i), fallback=100)
         priors['min_ecc{}'.format(i)] = config.getfloat('priors_settings', 'min_ecc{}'.format(i), fallback=0.)
         priors['max_ecc{}'.format(i)] = config.getfloat('priors_settings', 'max_ecc{}'.format(i), fallback=0.99)
+        priors['min_inc{}'.format(i)] = config.getfloat('priors_settings', 'min_inc{}'.format(i), fallback=0.)
+        priors['max_inc{}'.format(i)] = config.getfloat('priors_settings', 'max_inc{}'.format(i), fallback=np.pi)
     # priors on the RV jitter. Converting from m/s to orvara internal units.
     priors['minjit'] = config.getfloat('priors_settings', 'minjitter', fallback = 1e-5)
     priors['minjit'] = max(priors['minjit'], 1e-20) # effectively zero, but we need the log

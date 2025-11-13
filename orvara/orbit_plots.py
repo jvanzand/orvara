@@ -599,7 +599,7 @@ class OrbitPlots:
         #    print('You have chosen to plot RV for all the Instruments')
         all_OC = []
         all_OC_err = []
-        
+        #import pdb; pdb.set_trace()
         for i in range(self.nInst):
             plot_this = True
             if not self.whichInst == np.str('All'):
