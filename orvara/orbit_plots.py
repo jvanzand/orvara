@@ -582,9 +582,21 @@ class OrbitPlots:
         ax1.plot(self.epoch_calendar, orb_ml.RV, color='black')
         ax2.plot(self.epoch_calendar, np.zeros(len(self.epoch)), 'k--', dashes=(5, 5))
         
+        ## Judah: first, check if self.whichInst is 'All' or a list of indices
+        if not self.whichInst == np.str('All'):
+            whichInst = eval(self.whichInst) # Once we know self.whichInst is not "All", we can eval to a list
+            assert type(whichInst)==list, "Error: the RV_Instrument in your .ini file must be All or a list"
+        else:
+            whichInst = self.whichInst
+        
         rv_epoch_list = []
         all_RV_eps = []
         for i in range(self.nInst):
+            
+            if whichInst!='All':
+                import pdb; pdb.set_trace()
+                if i not in whichInst:
+                    continue
             epoch_obs_Inst = np.zeros(len(self.epoch_obs_dic[i]))
             for j in range(len(self.epoch_obs_dic[i])):
                 epoch_obs_Inst[j] = self.JD_to_calendar(self.epoch_obs_dic[i][j])
@@ -601,17 +613,22 @@ class OrbitPlots:
         all_OC_err = []
         #import pdb; pdb.set_trace()
         for i in range(self.nInst):
-            plot_this = True
-            if not self.whichInst == np.str('All'):
-                #import pdb; pdb.set_trace()
-                plot_this = False
-                whichInst = np.int(self.whichInst)
-                if i + 1 == whichInst and i < self.nInst:
-                    plot_this = True
+            plot_this=False
+            #plot_this = True
+            #if not self.whichInst == np.str('All'):
+                #whichInst = eval(self.whichInst) # Once we know self.whichInst is not "All", we can eval to a list
+                #assert type(whichInst)==list, "Error: the RV_Instrument in your .ini file must be All or a list"
+                #plot_this = False
+                ##whichInst = np.int(self.whichInst)
+
+                ##if i + 1 == whichInst and i < self.nInst:
+            if i in whichInst:
+                plot_this = True
             if not plot_this:
                 continue
             
             jit_ml = orb_ml.par.return_jitters()
+            #import pdb; pdb.set_trace()
             ax1.errorbar(rv_epoch_list[i], self.RV_obs_dic[i] + orb_ml.offset[i], yerr=np.sqrt(self.RV_obs_err_dic[i]**2 + jit_ml[i]**2), fmt=self.color_list[i]+'o', ecolor='black', capsize=3, alpha = 0.8, zorder=199+i)#, ecolor='black', markersize = 1, elinewidth = 0.3, capsize=1, capthick = 0.3, zorder = 200+i, alpha = 0.8)
             ax1.scatter(rv_epoch_list[i], self.RV_obs_dic[i] + orb_ml.offset[i], s=45, facecolors='none', edgecolors='k', zorder=200+i, alpha = 0.8)
             
