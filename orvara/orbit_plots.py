@@ -594,7 +594,7 @@ class OrbitPlots:
         for i in range(self.nInst):
             
             if whichInst!='All':
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
                 if i not in whichInst:
                     continue
             epoch_obs_Inst = np.zeros(len(self.epoch_obs_dic[i]))
@@ -622,8 +622,11 @@ class OrbitPlots:
                 ##whichInst = np.int(self.whichInst)
 
                 ##if i + 1 == whichInst and i < self.nInst:
-            if i in whichInst:
-                plot_this = True
+            if whichInst!='All':
+                if i in whichInst:
+                    plot_this = True
+            else:
+                plot_this=True
             if not plot_this:
                 continue
             
