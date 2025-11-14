@@ -204,6 +204,13 @@ class OrbitPlots:
             #nInst = len(set(rvdat[:,3])) # Judah: simply count unique inst numbers. Avoid bad numbering errs
             
             self.multi_instr = True
+            
+            # Judah: allow for user-supplied list of instruments, like [1,4,5]
+            if self.whichInst=='All':
+                pass
+            else:
+                whichInst = eval(self.whichInst) # Eval "[1,2,3]" to [1,2,3]
+                nInst = len(whichInst)
         except:
             self.multi_instr = False
             nInst = 1
@@ -214,11 +221,19 @@ class OrbitPlots:
         RV_obs_dic = {}
         RV_obs_err_dic = {}
         
-        for i in range(nInst):
+        ## Judah: allow for user-supplied list of instruments, like [1,4,5]
+        ## Anytime we iterate over instruments, either do them in order (range(nInst)), or specific ones only
+        if self.whichInst=='All':
+            self.inst_iterator = range(nInst)
+        else:
+            self.inst_iterator = whichInst
+
+        for i in self.inst_iterator:
             idx_dic[i] = (np.where(self.RVinst == i)[0])
             epoch_obs_dic[i] = epoch_obs[idx_dic[i]]
             RV_obs_dic[i] = RV_obs[idx_dic[i]]
             RV_obs_err_dic[i] = RV_obs_err[idx_dic[i]]
+        
         return epoch_obs, RV_obs, RV_obs_err, nInst, epoch_obs_dic, RV_obs_dic, RV_obs_err_dic
 
     def load_relAst_data(self, iplanet=None):
@@ -282,11 +297,12 @@ class OrbitPlots:
         """
             Function to calculate the offset of the observed RV data
         """
+        # import pdb; pdb.set_trace()
         try:
             # calculate the offsets of the RV curves
             assert self.multi_instr
             offset_dic = {}
-            for i in range(self.nInst):
+            for i in self.inst_iterator:
                 offset = self.chain['RV_ZP_%d_ML' % (i)][step]
                 offset_dic[i] = offset
         except:
@@ -574,8 +590,9 @@ class OrbitPlots:
 
         for i in range(self.num_orbits):
             orb = Orbit(self, step=self.rand_idx[i])
-            #import pdb; pdb.set_trace()
-            orb.RV -= orb.offset[0] - orb_ml.offset[0]
+            # import pdb; pdb.set_trace()
+            first_tel_ind = list(orb_ml.offset.keys())[0] # Choose first tel to apply sampled orbit offsets
+            orb.RV -= orb.offset[first_tel_ind] - orb_ml.offset[first_tel_ind] 
             ax1.plot(self.epoch_calendar, orb.RV, color=self.colormap(self.normalize(orb.colorpar)), alpha=0.3)
             ax2.plot(self.epoch_calendar, orb.RV - orb_ml.RV, color=self.colormap(self.normalize(orb.colorpar)), alpha=0.3)
 
@@ -583,15 +600,15 @@ class OrbitPlots:
         ax2.plot(self.epoch_calendar, np.zeros(len(self.epoch)), 'k--', dashes=(5, 5))
         
         ## Judah: first, check if self.whichInst is 'All' or a list of indices
-        if not self.whichInst == np.str('All'):
+        if self.whichInst == np.str('All'):
+            whichInst = self.whichInst
+        else:
             whichInst = eval(self.whichInst) # Once we know self.whichInst is not "All", we can eval to a list
             assert type(whichInst)==list, "Error: the RV_Instrument in your .ini file must be All or a list"
-        else:
-            whichInst = self.whichInst
         
         rv_epoch_list = []
         all_RV_eps = []
-        for i in range(self.nInst):
+        for i in self.inst_iterator:
             
             if whichInst!='All':
                 # import pdb; pdb.set_trace()
@@ -612,18 +629,11 @@ class OrbitPlots:
         all_OC = []
         all_OC_err = []
         #import pdb; pdb.set_trace()
-        for i in range(self.nInst):
+        for i, inst_ind in enumerate(self.inst_iterator):
             plot_this=False
-            #plot_this = True
-            #if not self.whichInst == np.str('All'):
-                #whichInst = eval(self.whichInst) # Once we know self.whichInst is not "All", we can eval to a list
-                #assert type(whichInst)==list, "Error: the RV_Instrument in your .ini file must be All or a list"
-                #plot_this = False
-                ##whichInst = np.int(self.whichInst)
 
-                ##if i + 1 == whichInst and i < self.nInst:
             if whichInst!='All':
-                if i in whichInst:
+                if inst_ind in whichInst:
                     plot_this = True
             else:
                 plot_this=True
@@ -631,16 +641,17 @@ class OrbitPlots:
                 continue
             
             jit_ml = orb_ml.par.return_jitters()
-            #import pdb; pdb.set_trace()
-            ax1.errorbar(rv_epoch_list[i], self.RV_obs_dic[i] + orb_ml.offset[i], yerr=np.sqrt(self.RV_obs_err_dic[i]**2 + jit_ml[i]**2), fmt=self.color_list[i]+'o', ecolor='black', capsize=3, alpha = 0.8, zorder=199+i)#, ecolor='black', markersize = 1, elinewidth = 0.3, capsize=1, capthick = 0.3, zorder = 200+i, alpha = 0.8)
-            ax1.scatter(rv_epoch_list[i], self.RV_obs_dic[i] + orb_ml.offset[i], s=45, facecolors='none', edgecolors='k', zorder=200+i, alpha = 0.8)
+            # import pdb; pdb.set_trace()
+            print("PLOTTING", i, inst_ind, len(rv_epoch_list[i]), len(self.RV_obs_dic[inst_ind]))
+            ax1.errorbar(rv_epoch_list[i], self.RV_obs_dic[inst_ind] + orb_ml.offset[inst_ind], yerr=np.sqrt(self.RV_obs_err_dic[inst_ind]**2 + jit_ml[inst_ind]**2), fmt=self.color_list[i]+'o', ecolor='black', capsize=3, alpha = 0.8, zorder=199+i)#, ecolor='black', markersize = 1, elinewidth = 0.3, capsize=1, capthick = 0.3, zorder = 200+i, alpha = 0.8)
+            ax1.scatter(rv_epoch_list[i], self.RV_obs_dic[inst_ind] + orb_ml.offset[inst_ind], s=45, facecolors='none', edgecolors='k', zorder=200+i, alpha = 0.8)
             
-            OC = self.RV_obs_dic[i] + orb_ml_obs.offset[i] - orb_ml_obs.RV[self.RVinst == i]
-            y_err = self.RV_obs_err_dic[i]
+            OC = self.RV_obs_dic[inst_ind] + orb_ml_obs.offset[inst_ind] - orb_ml_obs.RV[self.RVinst == inst_ind]
+            y_err = self.RV_obs_err_dic[inst_ind]
             all_OC += list(OC)
             all_OC_err += list(y_err)
             
-            ax2.errorbar(rv_epoch_list[i], OC, yerr=np.sqrt(y_err**2 + jit_ml[i]**2), fmt=self.color_list[i]+'o', ecolor='black', capsize=3)
+            ax2.errorbar(rv_epoch_list[i], OC, yerr=np.sqrt(y_err**2 + jit_ml[inst_ind]**2), fmt=self.color_list[i]+'o', ecolor='black', capsize=3)
             ax2.scatter(rv_epoch_list[i], OC, s=45, facecolors='none', edgecolors='k', zorder=100, alpha=0.5)
 
             #else:
@@ -651,9 +662,9 @@ class OrbitPlots:
         # ax1
         ax1.get_shared_x_axes().join(ax1, ax2)
         range_ep_obs = max(all_RV_eps) - min(all_RV_eps)
-        #import pdb; pdb.set_trace()
-        RV_obs_max = max([max(self.RV_obs_dic[i] + orb_ml.offset[i]) for i in range(self.nInst)])
-        RV_obs_min = min([min(self.RV_obs_dic[i] + orb_ml.offset[i]) for i in range(self.nInst)])
+        # import pdb; pdb.set_trace()
+        RV_obs_max = max([max(self.RV_obs_dic[i] + orb_ml.offset[i]) for i in self.inst_iterator])
+        RV_obs_min = min([min(self.RV_obs_dic[i] + orb_ml.offset[i]) for i in self.inst_iterator])
         range_RV_obs = RV_obs_max - RV_obs_min
         
         ax1.set_xlim(min(all_RV_eps) - range_ep_obs/20., max(all_RV_eps) + range_ep_obs/20.)
