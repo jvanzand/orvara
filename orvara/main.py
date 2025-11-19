@@ -532,6 +532,7 @@ def run():
         colnames += ['plx_ML', 'pmra_ML', 'pmdec_ML', 'chisq_sep', 
                      'chisq_PA', 'chisq_H', 'chisq_HG', 'chisq_G', 'chisq_relRV']
         units += ['', 'arcsec', 'arcsec/yr', 'arcsec/yr', '', '', '', '', '', '']
+        #import pdb; pdb.set_trace()
         colnames += ['RV_ZP_%d_ML' % (i) for i in range(data.nInst)]
         units += ['m/s' for i in range(data.nInst)]
 

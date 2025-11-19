@@ -103,7 +103,9 @@ class OrbitPlots:
 
     def start(self):
         self.cmlabel_dic = {'msec_jup': r'$\mathrm{M_{comp} (M_{Jup})}$','msec_solar': r'$\mathrm{M_{comp} (M_{\odot})}$', 'ecc': 'Eccentricity'}
-        self.color_list = ['r', 'g', 'b', 'y', 'c', 'k', 'm', 'purple', 'tomato']
+        #self.color_list = ['r', 'g', 'b', 'y', 'c', 'k', 'm', 'purple', 'tomato']
+        ## Judah: use a dict instead of a list so that colors stay consistent when leaving out some RV data sets
+        self.color_dict = {0:'r', 1:'g', 2:'b', 3:'y', 4:'c', 5:'k', 6:'m', 7:'purple', 8:'tomato'}
         
         ############################### load in data #######################
         # define epochs
@@ -297,7 +299,7 @@ class OrbitPlots:
         """
             Function to calculate the offset of the observed RV data
         """
-        # import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
         try:
             # calculate the offsets of the RV curves
             assert self.multi_instr
@@ -537,7 +539,7 @@ class OrbitPlots:
 
             for i in range(self.nInst):
                 ax.errorbar(rv_epoch_list[i], self.RV_obs_dic[i] + orb_ml.offset[i], yerr=np.sqrt(self.RV_obs_err_dic[i]**2 + jit_ml[i]**2),
-                            fmt=self.color_list[i]+'o', ecolor='black', alpha = 0.8, zorder = 299)
+                            fmt=self.color_dict[i]+'o', ecolor='black', alpha = 0.8, zorder = 299)
                 ax.scatter(rv_epoch_list[i], self.RV_obs_dic[i] + orb_ml.offset[i], facecolors='none', edgecolors='k', alpha = 0.8, zorder=300)
            
         if self.set_limit:
@@ -590,7 +592,7 @@ class OrbitPlots:
 
         for i in range(self.num_orbits):
             orb = Orbit(self, step=self.rand_idx[i])
-            # import pdb; pdb.set_trace()
+            #import pdb; pdb.set_trace()
             first_tel_ind = list(orb_ml.offset.keys())[0] # Choose first tel to apply sampled orbit offsets
             orb.RV -= orb.offset[first_tel_ind] - orb_ml.offset[first_tel_ind] 
             ax1.plot(self.epoch_calendar, orb.RV, color=self.colormap(self.normalize(orb.colorpar)), alpha=0.3)
@@ -641,9 +643,9 @@ class OrbitPlots:
                 continue
             
             jit_ml = orb_ml.par.return_jitters()
-            # import pdb; pdb.set_trace()
-            print("PLOTTING", i, inst_ind, len(rv_epoch_list[i]), len(self.RV_obs_dic[inst_ind]))
-            ax1.errorbar(rv_epoch_list[i], self.RV_obs_dic[inst_ind] + orb_ml.offset[inst_ind], yerr=np.sqrt(self.RV_obs_err_dic[inst_ind]**2 + jit_ml[inst_ind]**2), fmt=self.color_list[i]+'o', ecolor='black', capsize=3, alpha = 0.8, zorder=199+i)#, ecolor='black', markersize = 1, elinewidth = 0.3, capsize=1, capthick = 0.3, zorder = 200+i, alpha = 0.8)
+            #import pdb; pdb.set_trace()
+            ax1.errorbar(rv_epoch_list[i], self.RV_obs_dic[inst_ind] + orb_ml.offset[inst_ind], yerr=np.sqrt(self.RV_obs_err_dic[inst_ind]**2 + jit_ml[inst_ind]**2), fmt='o', color=self.color_dict[inst_ind], ecolor='black', capsize=3, alpha = 0.8, zorder=199+i)#, ecolor='black', markersize = 1, elinewidth = 0.3, capsize=1, capthick = 0.3, zorder = 200+i, alpha = 0.8)
+
             ax1.scatter(rv_epoch_list[i], self.RV_obs_dic[inst_ind] + orb_ml.offset[inst_ind], s=45, facecolors='none', edgecolors='k', zorder=200+i, alpha = 0.8)
             
             OC = self.RV_obs_dic[inst_ind] + orb_ml_obs.offset[inst_ind] - orb_ml_obs.RV[self.RVinst == inst_ind]
@@ -651,7 +653,7 @@ class OrbitPlots:
             all_OC += list(OC)
             all_OC_err += list(y_err)
             
-            ax2.errorbar(rv_epoch_list[i], OC, yerr=np.sqrt(y_err**2 + jit_ml[inst_ind]**2), fmt=self.color_list[i]+'o', ecolor='black', capsize=3)
+            ax2.errorbar(rv_epoch_list[i], OC, yerr=np.sqrt(y_err**2 + jit_ml[inst_ind]**2), fmt='o', color=self.color_dict[inst_ind], ecolor='black', capsize=3)
             ax2.scatter(rv_epoch_list[i], OC, s=45, facecolors='none', edgecolors='k', zorder=100, alpha=0.5)
 
             #else:
