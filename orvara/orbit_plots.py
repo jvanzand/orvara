@@ -335,6 +335,15 @@ class OrbitPlots:
         If nodes is specified, get the nodes, periastron position, and 
         a point just off to compute the direction of motion.
         """
+        #import pdb; pdb.set_trace()
+        #par.arg = 18.5*np.pi/180
+        #par.asc = 197.5*np.pi/180
+        #par.inc = 120.3*np.pi/180
+        #par.ecc = 0.7
+        print("Arg: ", par.arg*180/np.pi)
+        print("Asc: ", par.asc*180/np.pi)
+        print("Inc: ", par.inc*180/np.pi)
+        print("")
         A = np.cos(par.arg)*np.cos(par.asc) 
         A -= np.sin(par.arg)*np.sin(par.asc)*np.cos(par.inc)
         B = np.cos(par.arg)*np.sin(par.asc)
@@ -1378,7 +1387,8 @@ class OrbitPlots:
             labels=[r'$\mathrm{M_{pri}\, (M_{\odot})}$', r'$\mathrm{M_{sec}\, (M_{Jup})}$', 'a (AU)', r'e', r'$\omega$', r'$\mathrm{i\, (^{\circ})}$', r'$\Omega$', r'$\lambda$']
         Semimajor = chain['sau' + npl]
         Ecc = chain['esino' + npl]**2 + chain['ecoso' + npl]**2
-        omeg = np.arcsin(chain['esino'+npl]/np.sqrt(Ecc))
+        #omeg = np.arcsin(chain['esino'+npl]/np.sqrt(Ecc))
+        omeg = np.arctan2(chain['esino'+npl], chain['ecoso'+npl]) # Judah: arctan2 chooses the correct quadrant
         Inc = chain['inc' + npl]
         Omeg = chain['asc' + npl]
         Lam = chain['lam' + npl]
@@ -1587,6 +1597,7 @@ class OrbitPlots:
 
             print("Saving posterior parameters to " + self.outputdir)
             print("BOUTTAA SSAVVVEEE")
+
             text_file = open(os.path.join(self.outputdir, 'posterior_params_' + self.title) +'.txt', "w")
 
             for i in range(len(label)):
